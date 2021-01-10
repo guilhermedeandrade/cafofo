@@ -23,14 +23,44 @@ defmodule Cafofo do
   end
 
   def find_items_info(document) do
-    document
-    |> Floki.find("ul#ad-list")
-    |> Floki.find("a > div > div:nth-child(2) > div:first-child")
+    Floki.find(
+      document,
+      "ul#ad-list a > div > div:nth-child(2) > div:first-child"
+    )
   end
 
-  # TODO: figure how to filter out the expensive items
-  def get_rent_cost(document) do
-    Floki.find(document, "div > div:nth-child(2) > div:nth-child(2) span")
+  def get_rent_cost(node) do
+    rent_cost =
+      node
+      |> Floki.find("div > div:nth-child(2) > div:nth-child(2) span[color=graphite]")
+      |> Floki.text()
+      |> String.replace("R$", "")
+      |> String.replace(".", "")
+      |> String.trim()
+
+    case rent_cost do
+      "" ->
+        {:error, "Item is not available"}
+
+      _ ->
+        {:ok, String.to_integer(rent_cost)}
+    end
+  end
+
+  def is_within_the_budget?(node) do
+    budget = System.get_env("BUDGET") |> String.to_integer()
+
+    case get_rent_cost(node) do
+      {:ok, rent_cost} ->
+        rent_cost < budget
+
+      {:error, _} ->
+        false
+    end
+  end
+
+  def filter_houses_within_the_budget(document) do
+    Enum.filter(document, fn node -> is_within_the_budget?(node) end)
   end
 
   def get_houses do
@@ -38,6 +68,6 @@ defmodule Cafofo do
     |> fetch_page
     |> parse_html
     |> find_items_info
-    |> get_rent_cost
+    |> filter_houses_within_the_budget
   end
 end
